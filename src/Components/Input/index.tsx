@@ -30,7 +30,6 @@ const Input: React.ForwardRefRenderFunction<InputRef, InputProps> = (
   ref,
 ) => {
   const inputElementRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { registerField, defaultValue = '', fieldName, error } = useField(name);
   const inputValueRef = useRef<InputValueReference>({ value: defaultValue });
 
@@ -70,7 +69,7 @@ const Input: React.ForwardRefRenderFunction<InputRef, InputProps> = (
   }, [fieldName, registerField]);
 
   return (
-    <Container isFocused={isFocused}>
+    <Container isFocused={isFocused} isErrored={!!error}>
       <Icon
         name={icon}
         size={20}
