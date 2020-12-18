@@ -10,6 +10,7 @@ import {
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import * as Yup from 'yup';
+import ImagePicker from 'react-native-image-picker';
 import { Form } from '@unform/mobile';
 import { FormHandles } from '@unform/core';
 import api from '../../services/api';
@@ -27,14 +28,16 @@ import {
 } from './styles';
 import { useAuth } from '../../hooks/auth';
 
-interface SignUpFormData {
+interface ProfileFormData {
   name: string;
   email: string;
+  old_password: string;
   password: string;
+  password_confirmation: string;
 }
 
-const SignUp: React.FC = () => {
-  const { user } = useAuth();
+const Profile: React.FC = () => {
+  const { user, updateUser } = useAuth();
   const formRef = useRef<FormHandles>(null);
   const navigation = useNavigation();
 
@@ -43,8 +46,40 @@ const SignUp: React.FC = () => {
   const passwordInputRef = useRef<TextInput>(null);
   const confirmPasswordInputRef = useRef<TextInput>(null);
 
-  const handleSignUp = useCallback(
-    async (data: SignUpFormData) => {
+  const handleUpdateAvatar = useCallback(() => {
+    ImagePicker.showImagePicker(
+      {
+        title: 'Selecione um avatar',
+        cancelButtonTitle: 'Cancelar',
+        takePhotoButtonTitle: 'Usar câmera',
+        chooseFromLibraryButtonTitle: 'Escolhe da galeria',
+      },
+      response => {
+        if (response.didCancel) {
+          return;
+        }
+        if (response.error) {
+          Alert.alert('Erro ao atualizar seu avatar');
+          return;
+        }
+
+        const data = new FormData();
+        data.append('avatar', {
+          type: 'image/jpeg',
+          name: `${user.id}.jpg`,
+          uri: response.uri,
+        });
+        api.patch('users/avatar', data).then(apiResponse => {
+          updateUser(apiResponse.data);
+        });
+
+        /* this.setState({ avatarSource: source }); */
+      },
+    );
+  }, [updateUser, user.id]);
+
+  const handleProfile = useCallback(
+    async (data: ProfileFormData) => {
       try {
         formRef.current?.setErrors({});
         const schema = Yup.object().shape({
@@ -52,18 +87,47 @@ const SignUp: React.FC = () => {
           email: Yup.string()
             .required('E-mail Obrigatório')
             .email('Digite um E-mail válido'),
-          password: Yup.string().min(6, 'No mínimo 6 dígitos'),
+          old_password: Yup.string(),
+          password: Yup.string().when('old_password', {
+            is: val => !!val.length,
+            then: Yup.string().required('Campo Obrigatório'),
+            otherwise: Yup.string(),
+          }),
+          password_confirmation: Yup.string()
+            .when('old_password', {
+              is: val => !!val.length,
+              then: Yup.string().required('Campo Obrigatório'),
+              otherwise: Yup.string(),
+            })
+            .oneOf([Yup.ref('password')], 'Confirmação incorreta'),
         });
         await schema.validate(data, {
           abortEarly: false,
         });
+        const {
+          name,
+          email,
+          old_password,
+          password,
+          password_confirmation,
+        } = data;
 
-        await api.post('/users', data);
+        const formData = {
+          name,
+          email,
+          ...(old_password
+            ? {
+                old_password,
+                password,
+                password_confirmation,
+              }
+            : {}),
+        };
 
-        Alert.alert(
-          'Cadastro realizado com sucesso!',
-          'Você já pode fazer o login na aplicação!',
-        );
+        const response = await api.put('profile', formData);
+        updateUser(response.data);
+
+        Alert.alert('Perfil atualizado com sucesso!');
         navigation.goBack();
       } catch (err) {
         if (err instanceof Yup.ValidationError) {
@@ -72,12 +136,12 @@ const SignUp: React.FC = () => {
           return;
         }
         Alert.alert(
-          'Erro no Cadastro',
-          'Ocorreu um erro ao fazer cadastro, tente novamente.',
+          'Erro na atualização do perfil',
+          'Ocorreu um erro ao atualizar seu perfil, tente novamente.',
         );
       }
     },
-    [navigation],
+    [navigation, updateUser],
   );
 
   const handleGoBack = useCallback(() => {
@@ -99,16 +163,17 @@ const SignUp: React.FC = () => {
             <BackButton onPress={handleGoBack}>
               <Icon name="chevron-left" size={24} color="#999591" />
             </BackButton>
-            <UserAvatarButton onPress={() => {}}>
+            <UserAvatarButton onPress={handleUpdateAvatar}>
               <UserAvatar source={{ uri: user.avatar_url }} />
             </UserAvatarButton>
             <View>
               <Title>Meu Perfil</Title>
             </View>
             <Form
+              initialData={user}
               style={{ width: '100%' }}
               ref={formRef}
-              onSubmit={handleSignUp}
+              onSubmit={handleProfile}
             >
               <Input
                 autoCapitalize="words"
@@ -185,4 +250,4 @@ const SignUp: React.FC = () => {
   );
 };
 
-export default SignUp;
+export default Profile;
